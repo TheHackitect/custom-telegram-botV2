@@ -40,36 +40,120 @@ def get_db():
 def generate_referral_id():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=5))
 
-# Define command handlers
-# Define command handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data.clear()
-    user = update.effective_user
-    db: Session = next(get_db())
-    new_user = db.query(User).filter(User.telegram_id == user.id).first()
-    if not new_user:
-        new_user = User(telegram_id=user.id, referral_id=generate_referral_id())
-        if context.args:
-            ref_id = context.args[0]
-            referrer = db.query(User).filter(User.referral_id == ref_id).first()
-            if referrer:
-                new_user.referrer_id = referrer.id
-                referrer.earnings += Settings.referral_earning
-                db.commit()
+
+# Helper function to create the button layout
+def create_button_layout(buttons):
+    layout = []
+    num_buttons = len(buttons)
+    if num_buttons % 2 == 0:  # Even number of buttons
+        if num_buttons > 0:
+            layout.append([buttons[0]])  # First row single button
+        for i in range(1, num_buttons - 1, 2):
+            layout.append([buttons[i], buttons[i + 1]])  # Middle rows with two buttons each
+        if num_buttons > 1:
+            layout.append([buttons[-1]])  # Last row single button
+    else:  # Odd number of buttons (brick structure)
+        i = 0
+        while i < num_buttons:
+            if i % 5 in (0, 3):  # Rows with 2 buttons
+                if i + 1 < num_buttons:
+                    layout.append([buttons[i], buttons[i + 1]])
+                    i += 2
+                else:
+                    layout.append([buttons[i]])  # Single button if only one left
+                    i += 1
+            else:  # Rows with 3 buttons
+                if i + 2 < num_buttons:
+                    layout.append([buttons[i], buttons[i + 1], buttons[i + 2]])
+                    i += 3
+                else:
+                    layout.append([buttons[i]])  # Single button if only one left
+                    i += 1
+    return layout
+
+
+async def start(update: Update, context: CallbackContext) -> None:
+    db: Session = SessionLocal()
+    if len(context.args) > 0:
+        referral_id = context.args[0]
+    else:
+        referral_id = None
+    referrer = db.query(User).filter_by(referral_id=referral_id).first()
+    if referrer:
+        referer_id=referrer.id
+        # Notify the referrer about the new referral
+        await context.bot.send_message(referrer.telegram_id, f"You have received a referral bonus!")
+    else:
+        referer_id = None
+    
+
+    user = db.query(User).filter_by(telegram_id=update.message.from_user.id).first()
+    if not user:
+        # Create a new user
+        new_user = User(
+            telegram_id=update.message.from_user.id,
+            username=update.message.from_user.username,
+            first_name=update.message.from_user.first_name,
+            last_name=update.message.from_user.last_name,
+            referral_id=generate_referral_id(),
+            referer_id=referer_id
+        )
         db.add(new_user)
         db.commit()
-        welcome_message = f"Hi {user.mention_html()}! Welcome to the bot."
-    else:
-        welcome_message = f"Hi {user.mention_html()}! Welcome back."
-    
-    additional_message = db.query(Command).filter_by(command='start').first()
-    if additional_message:
-        welcome_message += f"\n\n{additional_message.response}"
-    welcome_message += f"\n\nType /help to see available commands."
-    markup = ReplyKeyboardMarkup([['🔙 Back_Start']], resize_keyboard=True)
-    await update.message.reply_html(
-        rf"{welcome_message}", reply_markup=markup, disable_web_page_preview=True
-    )
+
+    try:
+        if referral_id:
+            # Check if the referrer exists
+            
+            if referrer:
+                print(referrer)
+                # Optionally, update earnings based on settings
+                settings = db.query(Settings).first()
+                if settings:
+                    referrer.earnings += settings.referral_earning
+                    referrer.total_earnings += settings.referral_earning  # Optionally update total earnings as well
+                    print(referrer)
+                    db.commit()
+        
+        # Fetch and send response for the start command
+        command_text = "start"
+        command = db.query(Command).filter_by(command=command_text).first()
+
+        if command:
+            response_text = command.response
+            inline_reply_markup = None
+
+            # Prepare the inline keyboard markup if it exists
+            inline_keyboard = []
+            if command.inline_links:
+                inline_buttons = [InlineKeyboardButton(link['text'], url=link['url']) for link in command.inline_links]
+                inline_keyboard = create_button_layout(inline_buttons)
+            inline_reply_markup = InlineKeyboardMarkup(inline_keyboard) if inline_keyboard else None
+
+            # Prepare the markup buttons if they exist
+            markup_buttons = []
+            if command.markup_buttons:
+                markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
+                markup_buttons = create_button_layout(markup_buttons_list)
+            markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True, one_time_keyboard=True) if markup_buttons else None
+
+            # Send the main response
+            if command.image_url:
+                await update.message.reply_photo(photo=command.image_url, caption=response_text, reply_markup=inline_reply_markup)
+            else:
+                await update.message.reply_text(text=response_text, reply_markup=inline_reply_markup, disable_web_page_preview=True)
+            
+            # Send the markup buttons as a separate message if they exist
+            if markup_reply_markup:
+                await update.message.reply_text("Here are your options:", reply_markup=markup_reply_markup)
+        else:
+            await update.message.reply_text("❌ Unknown Command!")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 
@@ -85,17 +169,20 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Here's the menu:", reply_markup=markup)
 
-# Define handler for forwarding messages from a set channel to all users
 async def forward_channel_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    channel_id = update.channel_post.chat.id
-    channel_message_id = update.channel_post.message_id
-    db: Session = next(get_db())
-    users = db.query(User).all()
-    for user in users:
-        try:
-            await context.bot.forward_message(chat_id=user.telegram_id, from_chat_id=channel_id, message_id=channel_message_id)
-        except Exception as e:
-            print(f"Failed to forward message to user {user.telegram_id}: {e}")
+    if update.message and update.message.chat.type == "supergroup":
+        channel_id = update.message.chat.id
+        channel_message_id = update.message.message_id
+        db: Session = next(get_db())
+        
+        # Query all users from the database
+        users = db.query(User).all()
+        for user in users:
+            try:
+                # Forward the message from the channel to each user
+                await context.bot.forward_message(chat_id=user.telegram_id, from_chat_id=channel_id, message_id=channel_message_id)
+            except Exception as e:
+                print(f"Failed to forward message to user {user.telegram_id}: {e}")
 
 async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db: Session = next(get_db())
@@ -103,20 +190,19 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     command = db.query(Command).filter_by(command=command_text).first()
     if command:
         response_text = command.response
+
         # Prepare the inline keyboard markup if it exists
         inline_keyboard = []
         if command.inline_links:
-            for i in range(0, len(command.inline_links), 2):
-                row = [InlineKeyboardButton(link['text'], url=link['url']) for link in command.inline_links[i:i+2]]
-                inline_keyboard.append(row)
+            inline_buttons = [InlineKeyboardButton(link['text'], url=link['url']) for link in command.inline_links]
+            inline_keyboard = create_button_layout(inline_buttons)
         inline_reply_markup = InlineKeyboardMarkup(inline_keyboard) if inline_keyboard else None
 
         # Prepare the markup buttons if they exist
         markup_buttons = []
         if command.markup_buttons:
-            for i in range(0, len(command.markup_buttons), 2):
-                row = [KeyboardButton(button) for button in command.markup_buttons[i:i+2]]
-                markup_buttons.append(row)
+            markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
+            markup_buttons = create_button_layout(markup_buttons_list)
         markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True, one_time_keyboard=True) if markup_buttons else None
 
         # Send the main response
@@ -129,9 +215,54 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if markup_reply_markup:
             await update.message.reply_text("Here are your options:", reply_markup=markup_reply_markup)
     else:
-        await update.message.reply_text("Command not found.")
+        await update.message.reply_text(f"❌ Unknown Command!\n\n"
+
+            f"You have send a Message directly into the Bot's chat or"
+            f"Menu structure has been modified by Admin.\n\n"
+
+            f"ℹ️ Do not send Messages directly to the Bot or"
+            f"reload the Menu by pressing /start")
 
 
+
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    db: Session = next(get_db())
+    message_text = update.message.text.lower().replace(" ", "_")
+    command = db.query(Command).filter_by(command=message_text).first()
+    if command:
+        response_text = command.response
+
+        # Prepare the inline keyboard markup if it exists
+        inline_keyboard = []
+        if command.inline_links:
+            inline_buttons = [InlineKeyboardButton(link['text'], url=link['url']) for link in command.inline_links]
+            inline_keyboard = create_button_layout(inline_buttons)
+        inline_reply_markup = InlineKeyboardMarkup(inline_keyboard) if inline_keyboard else None
+
+        # Prepare the markup buttons if they exist
+        markup_buttons = []
+        if command.markup_buttons:
+            markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
+            markup_buttons = create_button_layout(markup_buttons_list)
+        markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True, one_time_keyboard=True) if markup_buttons else None
+
+        # Send the main response
+        if command.image_url:
+            await update.message.reply_photo(photo=command.image_url, caption=response_text, reply_markup=inline_reply_markup)
+        else:
+            await update.message.reply_text(text=response_text, reply_markup=inline_reply_markup, disable_web_page_preview=True)
+
+        # Send the markup buttons as a separate message if they exist
+        if markup_reply_markup:
+            await update.message.reply_text("Here are your options:", reply_markup=markup_reply_markup)
+    else:
+        await update.message.reply_text(f"❌ Unknown Message!\n\n"
+
+            f"You have send a Message directly into the Bot's chat or"
+            f"Menu structure has been modified by Admin.\n\n"
+
+            f"ℹ️ Do not send Messages directly to the Bot or"
+            f"reload the Menu by pressing /start")
 
 
 async def affiliate(update: Update, context: CallbackContext) -> None:
@@ -143,7 +274,10 @@ async def affiliate(update: Update, context: CallbackContext) -> None:
 
     if user_data:
         ref_link = f"https://t.me/{context.bot.username}?start={user_data.referral_id}"
-        referrals_count = len(user_data.downlines) if user_data.downlines else 0
+        
+        # Count the number of direct referrals
+        referrals_count = db.query(User).filter(User.referer_id == user_data.id).count()
+        
         affiliate_info = (
             f"👤 Your Affiliate Information\n\n"
             f"👥 Referrals: {referrals_count}\n"
@@ -154,6 +288,7 @@ async def affiliate(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(affiliate_info)
     else:
         await update.message.reply_text("You are not registered as a user.")
+
 
 async def set_ref_earning(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     admin_id = update.effective_user.id
@@ -331,9 +466,10 @@ async def add_command_markup_buttons(update: Update, context: ContextTypes.DEFAU
 
 async def add_command_finish_save_markup_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     buttons_text = update.message.text
-    buttons = [button.strip() for button in buttons_text.split(',')]  # Split by ',' to create a list of buttons
-    context.user_data['markup_buttons'] = buttons
-    return await add_command_finish(update, context)
+    if update.message.text.lower() != 'no':
+        buttons = [button.strip() for button in buttons_text.split(',')]  # Split by ',' to create a list of buttons
+        context.user_data['markup_buttons'] = buttons
+        return await add_command_finish(update, context)
 
 async def add_command_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     db: Session = next(get_db())
@@ -419,7 +555,7 @@ async def delete_command_start(update: Update, context: ContextTypes.DEFAULT_TYP
     return DELETE_COMMAND
 
 async def delete_command_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['command'] = update.message.text
+    context.user_data['command'] = update.message.text.lower()
     db: Session = next(get_db())
     command = db.query(Command).filter_by(command=context.user_data['command']).first()
     if not command:
@@ -507,15 +643,15 @@ def main() -> None:
             ADD_RESPONSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_is_admin)],
             ADD_IS_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_image)],
             ADD_IMAGE: [
-                MessageHandler(filters.Regex('^(yes|no)$') & ~filters.COMMAND, add_command_inline_links),
+                MessageHandler(filters.Regex('(?i)^(yes|no)$') & ~filters.COMMAND, add_command_inline_links),
                 MessageHandler(filters.PHOTO & ~filters.COMMAND, add_command_save_image)
             ],
             ADD_INLINE_LINKS: [
-                MessageHandler(filters.Regex('^(yes|no)$') & ~filters.COMMAND, add_command_finish_inline_links),
+                MessageHandler(filters.Regex('(?i)^(yes|no)$') & ~filters.COMMAND, add_command_finish_inline_links),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_finish_save_links)
             ],
             ADD_MARKUP_BUTTONS: [
-                MessageHandler(filters.Regex('^(yes|no)$') & ~filters.COMMAND, add_command_markup_buttons),
+                MessageHandler(filters.Regex('(?i)^(yes|no)$') & ~filters.COMMAND, add_command_markup_buttons),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_finish_save_markup_buttons)
             ],
         },
@@ -594,11 +730,12 @@ def main() -> None:
     # application.add_handler(MessageHandler(filters.TEXT, echo))
 
     # Message handler for forwarding channel messages
-    application.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, forward_channel_message))
+    application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE, forward_channel_message))
 
     # Message handler for command responses with optional image/inline links
-    application.add_handler(MessageHandler(filters.TEXT & filters.COMMAND, command_handler))
-    # application.add_handler(MessageHandler(filters.COMMAND, command_handler))
+    application.add_handler(MessageHandler(filters.COMMAND, command_handler))
+    application.add_handler(MessageHandler(filters.TEXT, text_handler))
+    
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling()
