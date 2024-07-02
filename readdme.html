@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot README</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="my-4">
+            <h1 class="display-4">Telegram Bot</h1>
+            <p class="lead">A comprehensive guide to understanding and operating your Telegram bot.</p>
+        </header>
+        
+        <section id="introduction" class="my-4">
+            <h2>Introduction</h2>
+            <p>This bot provides various functionalities including command handling, referral system, and user management. This guide will help you set up and operate the bot efficiently.</p>
+        </section>
+        
+        <section id="installation" class="my-4">
+            <h2>Installation</h2>
+            <ol>
+                <li>Clone the repository: <code>git clone https://github.com/your-repo/telegram-bot.git</code></li>
+                <li>Navigate to the project directory: <code>cd telegram-bot</code></li>
+                <li>Install the dependencies: <code>pip install -r requirements.txt</code></li>
+                <li>Set up the configuration files as described in the <a href="#configuration">Configuration</a> section.</li>
+                <li>Run the bot: <code>python bot.py</code></li>
+            </ol>
+        </section>
+        
+        <section id="configuration" class="my-4">
+            <h2>Configuration</h2>
+            <p>Edit the <code>config.py</code> file to include your bot token and admin ID:</p>
+            <pre>
+<code>
+BOT_TOKEN = 'YOUR_BOT_TOKEN'
+ADMIN_ID = 'YOUR_ADMIN_ID'
+</code>
+            </pre>
+        </section>
+        
+        <section id="usage" class="my-4">
+            <h2>Usage</h2>
+            <p>Once the bot is running, you can interact with it using the following commands:</p>
+            <ul>
+                <li><code>/start</code> - Initialize the bot and handle referral IDs.</li>
+                <li><code>/menu</code> - Display the menu options.</li>
+                <li>Additional commands can be added and customized in the <code>commands</code> table in the database.</li>
+            </ul>
+        </section>
+        
+        <section id="commands" class="my-4">
+            <h2>Commands</h2>
+            <p>The bot supports various commands to manage users, admins, and settings. Here are some examples:</p>
+            <ul>
+                <li><code>/add_command</code> - Add a new command.</li>
+                <li><code>/edit_command</code> - Edit an existing command.</li>
+                <li><code>/delete_command</code> - Delete a command.</li>
+                <li><code>/add_admin</code> - Add a new admin.</li>
+                <li><code>/delete_admin</code> - Delete an admin.</li>
+            </ul>
+        </section>
+        
+        <footer class="my-4">
+            <p>For more details, visit our <a href="https://github.com/your-repo/telegram-bot">GitHub repository</a>.</p>
+        </footer>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
