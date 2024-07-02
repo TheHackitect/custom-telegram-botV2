@@ -1,0 +1,21 @@
+Thanks!
+
+I want to add to important features.
+
+Leveraging on the existing features of this bot, this will need adjustment to the bot and the models.py.
+
+- Create an affiliate program(with downline earning feature). the (/affiliate) command
+
+
+- each new user will have a unique alphanumeric character of length 5 as their referal id
+so the referal link looks like (https://t.me/(get_bot_username_here)?start=Wdk4r)
+
+- so on start, check if they are referred and do the referal protocol (the referer is notified, and earns) and also the downline implementation too 
+
+- admin can use a commands to specify what the earning and downline earnings are eg; /set_ref_earning 10.5 , /set_downline_earning 7.3
+etc
+
+- basic referal infomations such as referals, downlines, earnings, referal link etc.. are sent for the /affiliate command (add emojis for aesthetics)
+
+- for the /menu command and  Unknown commands,
+send a markupkeyboad ( 6 rows, (row 3, 4 and 5 has two columns)) 
