@@ -726,15 +726,10 @@ def main() -> None:
     application.add_handler(delete_admin_conv_handler)
 
     application.add_handler(CommandHandler("cancel", cancel))
-    # Echo handler for non-command messages
-    # application.add_handler(MessageHandler(filters.TEXT, echo))
 
-    # Message handler for forwarding channel messages
-    application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE, forward_channel_message))
-
-    # Message handler for command responses with optional image/inline links
     application.add_handler(MessageHandler(filters.COMMAND, command_handler))
     application.add_handler(MessageHandler(filters.TEXT, text_handler))
+    application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE, forward_channel_message))
     
 
     # Run the bot until the user presses Ctrl-C
