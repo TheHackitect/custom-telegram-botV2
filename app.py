@@ -85,8 +85,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     referrer = db.query(User).filter_by(referral_id=referral_id).first()
     if referrer:
         referer_id=referrer.id
-        # Notify the referrer about the new referral
-        await context.bot.send_message(referrer.telegram_id, f"You have received a referral bonus!")
     else:
         referer_id = None
     
@@ -106,17 +104,14 @@ async def start(update: Update, context: CallbackContext) -> None:
         db.commit()
 
     try:
-        if referral_id:
-            # Check if the referrer exists
-            
+        if referral_id:            
             if referrer:
-                print(referrer)
                 # Optionally, update earnings based on settings
                 settings = db.query(Settings).first()
                 if settings:
                     referrer.earnings += settings.referral_earning
                     referrer.total_earnings += settings.referral_earning  # Optionally update total earnings as well
-                    print(referrer)
+                    await context.bot.send_message(referrer.telegram_id, f"You have received a referral bonus!")
                     db.commit()
         
         # Fetch and send response for the start command
@@ -124,7 +119,7 @@ async def start(update: Update, context: CallbackContext) -> None:
         command = db.query(Command).filter_by(command=command_text).first()
 
         if command:
-            response_text = command.response
+            response_text = f"Hi {update.effective_user.first_name}!\n\n{command.response}"
             inline_reply_markup = None
 
             # Prepare the inline keyboard markup if it exists
@@ -149,9 +144,9 @@ async def start(update: Update, context: CallbackContext) -> None:
             
             # Send the markup buttons as a separate message if they exist
             if markup_reply_markup:
-                await update.message.reply_text("Here are your options:", reply_markup=markup_reply_markup)
+                await update.message.reply_text("Menu", reply_markup=markup_reply_markup)
         else:
-            await update.message.reply_text("❌ Unknown Command!")
+            await update.message.reply_text(f"Welcome {update.effective_user.first_name}!\n\n Use the /help command to see available commands")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -217,7 +212,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         # Send the markup buttons as a separate message if they exist
         if markup_reply_markup:
-            await update.message.reply_text("Here are your options:", reply_markup=markup_reply_markup)
+            await update.message.reply_text("Menu", reply_markup=markup_reply_markup)
     else:
         await update.message.reply_text(f"❌ Unknown Command!\n\n"
 
@@ -258,7 +253,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         # Send the markup buttons as a separate message if they exist
         if markup_reply_markup:
-            await update.message.reply_text("Here are your options:", reply_markup=markup_reply_markup)
+            await update.message.reply_text("Menu", reply_markup=markup_reply_markup)
     else:
         await update.message.reply_text(f"❌ Unknown Message!\n\n"
 
