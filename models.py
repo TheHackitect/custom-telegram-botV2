@@ -15,7 +15,7 @@ class Command(Base):
     command = Column(String, unique=True, index=True)
     description = Column(String)
     response = Column(String)
-    is_admin = Column(Boolean, default=False)
+    is_command = Column(Boolean, default=False)
     image_url = Column(String, nullable=True)
     inline_links = Column(JSON, nullable=True)
     markup_buttons = Column(JSON, nullable=True)  # New field for markup buttons

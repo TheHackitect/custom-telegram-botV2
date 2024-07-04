@@ -1,0 +1,47 @@
+[
+    {
+        "command": "/admin_help",
+        "description": "Get a list of admin commands for the bot",
+        "usage": "/admin_help"
+    },
+    {
+        "command": "/set_ref_earning",
+        "description": "Set the referral earning amount",
+        "usage": "/set_ref_earning <amount>"
+    },
+    {
+        "command": "/deduct_ref_points",
+        "description": "Deduct referral points from a user",
+        "usage": "/deduct_ref_points <user_id> <points>"
+    },
+    {
+        "command": "/export",
+        "description": "Export the database in the specified format",
+        "usage": "/export <sqlite|csv|excel>"
+    },
+    {
+        "command": "/addcommand",
+        "description": "Start the process to add a new command",
+        "usage": "/addcommand"
+    },
+    {
+        "command": "/deletecommand",
+        "description": "Start the process to delete a command",
+        "usage": "/deletecommand"
+    },
+    {
+        "command": "/addadmin",
+        "description": "Start the process to add a new admin",
+        "usage": "/addadmin"
+    },
+    {
+        "command": "/deleteadmin",
+        "description": "Start the process to delete an admin",
+        "usage": "/deleteadmin"
+    },
+    {
+        "command": "/cancel",
+        "description": "Cancel the current operation",
+        "usage": "/cancel"
+    }
+]

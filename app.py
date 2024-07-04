@@ -8,20 +8,24 @@ import uuid
 
 from config import BOT_TOKEN, ADMIN_ID
 from models import SessionLocal, User, Admin, Command, Settings
+import pandas as pd
+import os
+import json
+from models import engine
 
 # Conversation states
 (
     ADD_COMMAND,
     ADD_DESCRIPTION,
     ADD_RESPONSE,
-    ADD_IS_ADMIN,
+    ADD_IS_COMMAND,
     ADD_IMAGE,
     ADD_INLINE_LINKS,
     EDIT_COMMAND,
     EDIT_CHOICE,
     EDIT_DESCRIPTION,
     EDIT_RESPONSE,
-    EDIT_IS_ADMIN,
+    EDIT_IS_COMMAND,
     DELETE_COMMAND,
     DELETE_CONFIRMATION,
     ADD_ADMIN,
@@ -135,7 +139,7 @@ async def start(update: Update, context: CallbackContext) -> None:
             if command.markup_buttons:
                 markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
                 markup_buttons = create_button_layout(markup_buttons_list)
-            markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True, one_time_keyboard=True) if markup_buttons else None
+            markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True) if markup_buttons else None
 
             # Send the main response
             if command.image_url:
@@ -203,7 +207,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if command.markup_buttons:
             markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
             markup_buttons = create_button_layout(markup_buttons_list)
-        markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True, one_time_keyboard=True) if markup_buttons else None
+        markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True) if markup_buttons else None
 
         # Send the main response
         if command.image_url:
@@ -227,7 +231,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db: Session = next(get_db())
-    message_text = update.message.text.lower().replace(" ", "_")
+    message_text = update.message.text.lower()
     command = db.query(Command).filter_by(command=message_text).first()
     if command:
         response_text = command.response
@@ -244,7 +248,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if command.markup_buttons:
             markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
             markup_buttons = create_button_layout(markup_buttons_list)
-        markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True, one_time_keyboard=True) if markup_buttons else None
+        markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True) if markup_buttons else None
 
         # Send the main response
         if command.image_url:
@@ -330,33 +334,46 @@ async def set_downline_earning(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db: Session = next(get_db())
-    commands = db.query(Command).filter_by(is_admin=False).all()
-    help_text = "Available commands:\n"
-    for cmd in commands:
-        help_text += f"/{cmd.command}: {cmd.description}\n"
-    await update.message.reply_text(help_text)
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    db: Session = next(get_db())
-    commands = db.query(Command).filter_by(is_admin=False).all()
+    commands = db.query(Command).filter_by(is_command=True).all()
     help_text = "Available commands:\n\n"
     for cmd in commands:
         help_text += f"/{cmd.command}: {cmd.description}\n\n"
     await update.message.reply_text(help_text)
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    command_text = update.message.text[1:]
-    db: Session = next(get_db())
-    command = db.query(Command).filter_by(command=command_text).first()
 
-    if command:
-        if command.is_admin and user.id != ADMIN_ID:
-            await update.message.reply_text("This command is restricted to admins.")
-        else:
-            await update.message.reply_text(command.response)
-    else:
-        await update.message.reply_text("Command not found.")
+async def deduct_ref_points(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    db: Session = next(get_db())
+    
+    # Check if the user is an admin
+    admin = db.query(Admin).filter(Admin.telegram_id == user.id).first()
+    if not admin:
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+    
+    # Parse command arguments
+    if len(context.args) != 2:
+        await update.message.reply_text("Usage: /deduct_ref_points <user id> <points>")
+        return
+    
+    try:
+        user_id = int(context.args[0])
+        points = float(context.args[1])
+    except ValueError:
+        await update.message.reply_text("Invalid user ID or points. Please enter a valid number.")
+        return
+    
+    # Fetch the user to deduct points from
+    target_user = db.query(User).filter(User.telegram_id == user_id).first()
+    if not target_user:
+        await update.message.reply_text("User not found.")
+        return
+    
+    # Deduct points ensuring earnings do not go below 0.0
+    target_user.earnings = max(target_user.earnings - points, 0.0)
+    db.commit()
+    
+    await update.message.reply_text(f"Successfully deducted {points} points from user {user_id}. New earnings: {target_user.earnings}")
 
 # Conversation handlers for adding a command
 async def add_command_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -366,40 +383,61 @@ async def add_command_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not admin:
         await update.message.reply_text("You are not authorized to perform this action.")
         return ConversationHandler.END
-    await update.message.reply_text("Enter the command without '/':\n\nUse /cancel to cancel")
+    await update.message.reply_text(f"Enter tbe custom PROMPT for the bot.\n\n"
+                                    f"Examples: ' start ' , ' 🏠 Menu ' ...\n\n"
+                                    f"Enter the Prompt without ' / ' or ' ! '. \n⚠️ Avoid using existing prompts!:\n\n"
+                                    f"Use /cancel to cancel")
     return ADD_COMMAND
 
 async def add_command_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     command = update.message.text
-    context.user_data['command'] = (command.replace(' ','_')).lower()
-    await update.message.reply_text("Enter the description:\n\nUse /cancel to cancel")
+    context.user_data['command'] = command
+    await update.message.reply_text("Enter the DESCRIPTION For this prompt.\n\n"
+                                    f"Tell Users what this PROMT Does:\n\n"
+                                    f"Use /cancel to cancel")
     return ADD_DESCRIPTION
 
 async def add_command_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['description'] = update.message.text
-    await update.message.reply_text("Enter the response:\n\nUse /cancel to cancel")
+    await update.message.reply_text("Enter the RESPONSE For this prompt.\n\n"
+                                    f"This is where you specify what users will seewhen they send in the promt to the bot:\n\n"
+                                    f"Use /cancel to cancel")
     return ADD_RESPONSE
 
-async def add_command_is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def add_command_is_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['response'] = update.message.text
-    await update.message.reply_text("Is this an admin command? (yes/no)\n\nUse /cancel to cancel")
-    return ADD_IS_ADMIN
+    keyboard = [
+        ["Command", "Text"],
+        ]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    proposed_prompt = (context.user_data['command'].replace(' ','_')).replace('/','')
+    await update.message.reply_text(f"What KIND of PROMT is this?\n\n"
+                                    f"Is this a commad: ' / {proposed_prompt} ' OR just text: ' {context.user_data['command']} ' ...\n\n"
+                                    f"Use /cancel to cancel", reply_markup=markup)
+    return ADD_IS_COMMAND
 
 async def add_command_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    is_admin = update.message.text.lower() == 'yes'
-    context.user_data['is_admin'] = is_admin
-    await update.message.reply_text("Upload an image here, else send 'no' \n\nUse /cancel to cancel")
+    is_command = update.message.text.lower()
+    if is_command == "command":
+        context.user_data['is_command'] = 1
+        context.user_data['command'] = ((context.user_data['command']).replace(" ","_"))
+    elif is_command == "text":
+        context.user_data['is_command'] = 0
+        context.user_data['command'] = context.user_data['command']
+    await update.message.reply_text("Great! Now, you can optionally Upload an IMAGE that will be sent with the prompt response\n\n"
+                                    f"If you dont wish to, just type 'skip'\n\n"
+                                    f"Use /cancel to cancel")
     return ADD_IMAGE
 
 async def add_command_inline_links(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    add_image = update.message.text.lower() == 'yes'
-    if add_image:
-        await update.message.reply_text("Please send the image file:\n\nUse /cancel to cancel")
-        return ADD_INLINE_LINKS
-    else:
-        context.user_data['image_url'] = None
-        await update.message.reply_text("Do you want to add inline links? (yes/no)\n\nUse /cancel to cancel")
-        return ADD_INLINE_LINKS
+    # add_image = update.message.text.lower() == 'yes'
+    # if add_image:
+    #     await update.message.reply_text("Please send the image file:\n\nUse /cancel to cancel")
+    #     return ADD_INLINE_LINKS
+    # else:
+    context.user_data['image_url'] = None
+    await update.message.reply_text("Do you want to add inline links? (yes/no)\n\nUse /cancel to cancel")
+    return ADD_INLINE_LINKS
 
 async def add_command_save_image(update: Update, context: CallbackContext) -> int:
   # Check if the message contains a photo
@@ -423,7 +461,7 @@ async def add_command_save_image(update: Update, context: CallbackContext) -> in
       context.user_data['image_url'] = file_path
   
       # Proceed to ask about inline links or finish
-      await update.message.reply_text("Image saved successfully. Do you want to add inline links? (yes/no)\n\nUse /cancel to cancel")
+      await update.message.reply_text("✅ Image saved successfully. \n\nDo you want to add inline links? (yes/no)\n\nUse /cancel to cancel")
       return ADD_INLINE_LINKS
   
     except Exception as e:
@@ -473,75 +511,26 @@ async def add_command_finish_save_markup_buttons(update: Update, context: Contex
 
 async def add_command_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     db: Session = next(get_db())
+    is_command=context.user_data['is_command'],
     new_command = Command(
-        command=context.user_data['command'],
+        command=(context.user_data['command'].lower() if not context.user_data['is_command'] else context.user_data['command'].lower().replace(' ','_')),
         description=context.user_data['description'],
         response=context.user_data['response'],
-        is_admin=context.user_data['is_admin'],
+        is_command=context.user_data['is_command'],
         image_url=context.user_data.get('image_url'),
         inline_links=context.user_data.get('inline_links'),
         markup_buttons=context.user_data.get('markup_buttons')  # Save markup buttons
     )
     db.add(new_command)
     db.commit()
-    await update.message.reply_text(f"Command /{new_command.command} created successfully.", reply_markup=ReplyKeyboardRemove())
+    if is_command == True:
+        await update.message.reply_text(f"✅ Command /{new_command.command} created successfully.", reply_markup=ReplyKeyboardRemove())
+    else:
+        await update.message.reply_text(f"✅ Text Prompt {new_command.command} created successfully.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 # Define constants for the new states
 ADD_MARKUP_BUTTONS = range(9, 10)
-
-# Conversation handlers for editing a command
-async def edit_command_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    admin_id = update.effective_user.id
-    db: Session = next(get_db())
-    admin = db.query(Admin).filter_by(telegram_id=admin_id).first()
-    if not admin:
-        await update.message.reply_text("You are not authorized to perform this action.")
-        return ConversationHandler.END
-    await update.message.reply_text("Enter the command you want to edit:\n\nUse /cancel to cancel")
-    return EDIT_COMMAND
-
-async def edit_command_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    command_text = update.message.text
-    db: Session = next(get_db())
-    command = db.query(Command).filter_by(command=command_text).first()
-    if not command:
-        await update.message.reply_text("Command not found.")
-        return ConversationHandler.END
-    context.user_data['command_id'] = command.id
-    keyboard = [['Description', 'Response', 'Admin Status']]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("What do you want to edit?\n\nUse /cancel to cancel", reply_markup=reply_markup)
-    return EDIT_CHOICE
-
-async def edit_command_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['edit_choice'] = 'description'
-    await update.message.reply_text("Enter the new description:\n\nUse /cancel to cancel")
-    return EDIT_DESCRIPTION
-
-async def edit_command_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['edit_choice'] = 'response'
-    await update.message.reply_text("Enter the new response:\n\nUse /cancel to cancel")
-    return EDIT_RESPONSE
-
-async def edit_command_is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['edit_choice'] = 'is_admin'
-    await update.message.reply_text("Is this an admin command? (yes/no)\n\nUse /cancel to cancel")
-    return EDIT_IS_ADMIN
-
-async def edit_command_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    db: Session = next(get_db())
-    command = db.query(Command).filter_by(id=context.user_data['command_id']).first()
-    edit_choice = context.user_data['edit_choice']
-    if edit_choice == 'description':
-        command.description = update.message.text
-    elif edit_choice == 'response':
-        command.response = update.message.text
-    elif edit_choice == 'is_admin':
-        command.is_admin = update.message.text.lower() == 'yes'
-    db.commit()
-    await update.message.reply_text("Command updated successfully.", reply_markup=ReplyKeyboardRemove())
-    return ConversationHandler.END
 
 # Conversation handlers for deleting a command
 async def delete_command_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -622,6 +611,81 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+async def export_database(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    db: Session = next(get_db())
+    
+    # Check if the user is an admin
+    admin = db.query(Admin).filter(Admin.telegram_id == user.id).first()
+    if not admin:
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+    
+    # Parse command arguments
+    if len(context.args) != 1 or context.args[0] not in ['sqlite', 'csv', 'excel']:
+        await update.message.reply_text("Usage: /export <sqlite|csv|excel>")
+        return
+    
+    export_format = context.args[0]
+    
+    try:
+        if export_format == 'sqlite':
+            # Assuming you are using an SQLite database
+            sqlite_file = 'path/to/your/database.sqlite'
+            await context.bot.send_document(chat_id=user.id, document=open(sqlite_file, 'rb'))
+        else:
+            # Export database tables to CSV files
+            users_df = pd.read_sql_table('users', engine)
+            commands_df = pd.read_sql_table('commands', engine)
+            admins_df = pd.read_sql_table('admins', engine)
+            settings_df = pd.read_sql_table('settings', engine)
+
+            users_df.to_csv('users.csv', index=False)
+            commands_df.to_csv('commands.csv', index=False)
+            admins_df.to_csv('admins.csv', index=False)
+            settings_df.to_csv('settings.csv', index=False)
+            
+            if export_format == 'csv':
+                for file in ['users.csv', 'commands.csv', 'admins.csv', 'settings.csv']:
+                    await context.bot.send_document(chat_id=user.id, document=open(file, 'rb'))
+                    os.remove(file)
+                    
+            elif export_format == 'excel':
+                with pd.ExcelWriter('database.xlsx', engine='openpyxl') as writer:
+                    users_df.to_excel(writer, sheet_name='Users', index=False)
+                    commands_df.to_excel(writer, sheet_name='Commands', index=False)
+                    admins_df.to_excel(writer, sheet_name='Admins', index=False)
+                    settings_df.to_excel(writer, sheet_name='Settings', index=False)
+
+                await context.bot.send_document(chat_id=user.id, document=open('database.xlsx', 'rb'))
+                os.remove('database.xlsx')
+                
+                # Remove CSV files after creating the Excel file
+                for file in ['users.csv', 'commands.csv', 'admins.csv', 'settings.csv']:
+                    os.remove(file)
+                    
+    except Exception as e:
+        await update.message.reply_text(f"Failed to export database: {e}")
+
+async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    db: Session = next(get_db())
+    
+    # Check if the user is an admin
+    admin = db.query(Admin).filter(Admin.telegram_id == user.id).first()
+    if not admin:
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+    with open('admin_help.json','r') as admin_cmds:
+        data = json.load(admin_cmds)
+    admin_commands = data
+
+    help_text = "👤 Admin Commands:\n\n"
+    for cmd in admin_commands:
+        help_text += f"{cmd['command']}: {cmd['description']}\nUsage: {cmd['usage']}\n\n"
+    
+    await update.message.reply_text(help_text)
+
 # Main function to start the bot
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
@@ -633,6 +697,11 @@ def main() -> None:
     application.add_handler(CommandHandler("affiliate", affiliate))
     application.add_handler(CommandHandler("set_ref_earning", set_ref_earning))
     application.add_handler(CommandHandler("set_downline_earning", set_downline_earning))
+    deduct_points_handler = CommandHandler('deduct_ref_points', deduct_ref_points)
+    export_handler = CommandHandler('export', export_database)
+    admin_help_handler = CommandHandler("admin_help", admin_help)
+    
+
 
     # Conversation handlers for adding commands
     add_command_conv_handler = ConversationHandler(
@@ -640,8 +709,8 @@ def main() -> None:
         states={
             ADD_COMMAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_description)],
             ADD_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_response)],
-            ADD_RESPONSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_is_admin)],
-            ADD_IS_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_image)],
+            ADD_RESPONSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_is_command)],
+            ADD_IS_COMMAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_image)],
             ADD_IMAGE: [
                 MessageHandler(filters.Regex('(?i)^(yes|no)$') & ~filters.COMMAND, add_command_inline_links),
                 MessageHandler(filters.PHOTO & ~filters.COMMAND, add_command_save_image)
@@ -654,27 +723,6 @@ def main() -> None:
                 MessageHandler(filters.Regex('(?i)^(yes|no)$') & ~filters.COMMAND, add_command_markup_buttons),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_command_finish_save_markup_buttons)
             ],
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel),
-            CommandHandler("start", start)
-        ],
-    )
-
-
-    # Conversation handlers for editing commands
-    edit_command_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("editcommand", edit_command_start)],
-        states={
-            EDIT_COMMAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_command_choice)],
-            EDIT_CHOICE: [
-                MessageHandler(filters.Regex('^(Description)$'), edit_command_description),
-                MessageHandler(filters.Regex('^(Response)$'), edit_command_response),
-                MessageHandler(filters.Regex('^(Admin Status)$'), edit_command_is_admin),
-            ],
-            EDIT_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_command_finish)],
-            EDIT_RESPONSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_command_finish)],
-            EDIT_IS_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_command_finish)],
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
@@ -720,10 +768,13 @@ def main() -> None:
 
     # Add conversation handlers to the application
     application.add_handler(add_command_conv_handler)
-    application.add_handler(edit_command_conv_handler)
+    # application.add_handler(edit_command_conv_handler)
     application.add_handler(delete_command_conv_handler)
     application.add_handler(add_admin_conv_handler)
     application.add_handler(delete_admin_conv_handler)
+    application.add_handler(export_handler)
+    application.add_handler(deduct_points_handler)
+    application.add_handler(admin_help_handler)
 
     application.add_handler(CommandHandler("cancel", cancel))
 
