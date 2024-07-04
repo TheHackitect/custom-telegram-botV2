@@ -4,71 +4,177 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telegram Bot README</title>
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #152a44, #5f197b);
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        .jumbotron {
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 2rem 1rem;
+            border-radius: 15px;
+        }
+        .card {
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            border: none;
+            border-radius: 15px;
+        }
+        .card-body {
+            text-align: left;
+        }
+        .fa-cog, .fa-file-code, .fa-play-circle, .fa-terminal, .fa-user-cog, .fa-code-branch {
+            color: #482ebd;
+        }
+        .header, .footer {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 1rem;
+            text-align: center;
+        }
+        .btn-custom {
+            background-color: #462483;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            padding: 10px 20px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        .btn-custom:hover {
+            background-color: #2980b9;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <header class="my-4">
+        <!-- Header -->
+        <header class="header my-4">
             <h1 class="display-4">Telegram Bot</h1>
             <p class="lead">A comprehensive guide to understanding and operating your Telegram bot.</p>
         </header>
         
-        <section id="introduction" class="my-4">
-            <h2>Introduction</h2>
-            <p>This bot provides various functionalities including command handling, referral system, and user management. This guide will help you set up and operate the bot efficiently.</p>
-        </section>
-        
-        <section id="installation" class="my-4">
-            <h2>Installation</h2>
-            <ol>
-                <li>Clone the repository: <code>git clone https://github.com/your-repo/telegram-bot.git</code></li>
-                <li>Navigate to the project directory: <code>cd telegram-bot</code></li>
-                <li>Install the dependencies: <code>pip install -r requirements.txt</code></li>
-                <li>Set up the configuration files as described in the <a href="#configuration">Configuration</a> section.</li>
-                <li>Run the bot: <code>python bot.py</code></li>
-            </ol>
-        </section>
-        
-        <section id="configuration" class="my-4">
-            <h2>Configuration</h2>
-            <p>Edit the <code>config.py</code> file to include your bot token and admin ID:</p>
-            <pre>
-<code>
-BOT_TOKEN = 'YOUR_BOT_TOKEN'
-ADMIN_ID = 'YOUR_ADMIN_ID'
-</code>
-            </pre>
-        </section>
-        
-        <section id="usage" class="my-4">
-            <h2>Usage</h2>
-            <p>Once the bot is running, you can interact with it using the following commands:</p>
-            <ul>
-                <li><code>/start</code> - Initialize the bot and handle referral IDs.</li>
-                <li><code>/menu</code> - Display the menu options.</li>
-                <li>Additional commands can be added and customized in the <code>commands</code> table in the database.</li>
-            </ul>
-        </section>
-        
-        <section id="commands" class="my-4">
-            <h2>Commands</h2>
-            <p>The bot supports various commands to manage users, admins, and settings. Here are some examples:</p>
-            <ul>
-                <li><code>/add_command</code> - Add a new command.</li>
-                <li><code>/edit_command</code> - Edit an existing command.</li>
-                <li><code>/delete_command</code> - Delete a command.</li>
-                <li><code>/add_admin</code> - Add a new admin.</li>
-                <li><code>/delete_admin</code> - Delete an admin.</li>
-            </ul>
-        </section>
-        
-        <footer class="my-4">
-            <p>For more details, visit our <a href="https://github.com/your-repo/telegram-bot">GitHub repository</a>.</p>
+        <!-- Jumbotron -->
+        <div class="jumbotron text-left">
+            <h2 class="display-4">Introduction</h2>
+            <p class="lead">This bot provides various functionalities including command handling, referral system, and user management. This guide will help you set up and operate the bot efficiently.</p>
+        </div>
+
+        <!-- Cards Section -->
+        <div class="row">
+            <!-- Installation -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-cog fa-3x"></i>
+                        <h5 class="card-title mt-3">Installation</h5>
+                        <p class="card-text">
+                            <ol>
+                                <li>Clone the repository: <code>git clone  https://github.com/TheHackitect/custom-telegram-botV2</code></li>
+                                <li>Navigate to the project directory: <code>cd telegram-bot</code></li>
+                                <li>Install the dependencies: <code>pip install -r requirements.txt</code></li>
+                                <li>Set up the configuration files as described in the Configuration section.</li>
+                                <li>Run the bot: <code>python bot.py</code></li>
+                            </ol>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Configuration -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-file-code fa-3x"></i>
+                        <h5 class="card-title mt-3">Configuration</h5>
+                        <p class="card-text">
+                            Edit the <code>config.py</code> file to include your bot token and admin ID:
+                            <pre><code>BOT_TOKEN = 'YOUR_BOT_TOKEN'\nADMIN_ID = 'YOUR_ADMIN_ID'</code></pre>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Usage -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-play-circle fa-3x"></i>
+                        <h5 class="card-title mt-3">Usage</h5>
+                        <p class="card-text">
+                            Once the bot is running, you can interact with it using the following commands:
+                            <ul>
+                                <li><code>/start</code> - Initialize the bot and handle referral IDs.</li>
+                                <li><code>/menu</code> - Display the menu options.</li>
+                                <li>Additional commands can be added and customized in the <code>commands</code> table in the database.</li>
+                            </ul>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Commands -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-terminal fa-3x"></i>
+                        <h5 class="card-title mt-3">Commands</h5>
+                        <p class="card-text">
+                            The bot supports various commands to manage users, admins, and settings. Here are the admin commands:
+                            <ul>
+                                <li><code>/admin_help</code> - Get a list of admin commands for the bot.</li>
+                                <li><code>/set_ref_earning</code> - Set the referral earning amount.</li>
+                                <li><code>/deduct_ref_points</code> - Deduct referral points from a user.</li>
+                                <li><code>/export</code> - Export the database in the specified format (sqlite, csv, excel).</li>
+                                <li><code>/addcommand</code> - Start the process to add a new command.</li>
+                                <li><code>/deletecommand</code> - Start the process to delete a command.</li>
+                                <li><code>/addadmin</code> - Start the process to add a new admin.</li>
+                                <li><code>/deleteadmin</code> - Start the process to delete an admin.</li>
+                                <li><code>/cancel</code> - Cancel the current operation.</li>
+                            </ul>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Add Admins -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-user-cog fa-3x"></i>
+                        <h5 class="card-title mt-3">Add Admins</h5>
+                        <p class="card-text">
+                            To add an admin, use the <code>/addadmin</code> command. This will start the process to grant a user administrative privileges within the bot.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Advanced Setup -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <i class="fas fa-code-branch fa-3x"></i>
+                        <h5 class="card-title mt-3">Advanced Setup</h5>
+                        <p class="card-text">
+                            For advanced configurations and customizations, refer to the documentation in the repository. This includes setting up webhooks, integrating with external APIs, and extending the bot's functionality.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer my-4">
+            <p>&copy; 2024 Telegram Bot. All Rights Reserved.</p>
         </footer>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
