@@ -12,6 +12,7 @@ import pandas as pd
 import os
 import json
 from models import engine
+import asyncio
 
 # Conversation states
 (
@@ -31,6 +32,8 @@ from models import engine
     ADD_ADMIN,
     DELETE_ADMIN_CONFIRMATION
 ) = range(15)
+
+bot = Bot(BOT_TOKEN)
 
 # Database session dependency
 def get_db():
@@ -76,101 +79,110 @@ def create_button_layout(buttons):
     return layout
 
 async def check_membership(user_id: int, bot) -> bool:
-    # bot = Bot(BOT_TOKEN)
     db: Session = next(get_db())
     settings = db.query(Settings).first()
-    
+
     if settings and settings.strict_join:
-        required_chats = settings.chats_to_join
+        if settings.chats_to_join:
+            required_chats = json.loads(settings.chats_to_join)
+        else:
+            required_chats = []
+
         for chat in required_chats:
             try:
                 member = await bot.get_chat_member(chat['id'], user_id)
-                if not member.status in ['member', 'administrator', 'creator']:
+                if member.status not in ['member', 'administrator', 'creator']:
                     return False
             except:
                 return False
     return True
 
-
-class JSONType(TypeDecorator):
-    impl = TEXT
-
-    def process_bind_param(self, value, dialect):
-        if value is None:
-            return '{}'
-        return json.dumps(value)
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return {}
-        return json.loads(value)
-
-async def add_chat_group(update: Update, context: CallbackContext) -> None:
+async def update_force_join_group(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
     db: Session = next(get_db())
+    admins = [admin.telegram_id for admin in db.query(Admin).all()]
 
-    if user.id in [admin.telegram_id for admin in db.query(Admin).all()]:
+    if user.id in admins:
         if len(context.args) != 1:
             await update.message.reply_text("Please provide the chat details in the format: /add_chat_group <chat_name>,<chat_id>,<chat_link>")
             return
 
-        try:
-            chat_details = context.args[0].split(',')
-            if len(chat_details) != 3:
-                await update.message.reply_text("Please provide exactly three arguments: <chat_name>,<chat_id>,<chat_link>")
-                return
+        # try:
+        chat_details = context.args[0].split(',')
+        if len(chat_details) != 3:
+            await update.message.reply_text("Please provide exactly three arguments: <chat_name>,<chat_id>,<chat_link>")
+            return
 
-            chat_name, chat_id, chat_link = chat_details
-            chat = {'name': chat_name.lower(), 'id': chat_id, 'link': chat_link}
+        chat_name, chat_id, chat_link = chat_details
+        chat = {'name': chat_name.lower(), 'id': chat_id, 'link': chat_link}
 
-            # Fetch or create Settings object
-            settings = db.query(Settings).first()
-            if settings is None:
-                settings = Settings(chats_to_join=[chat])
-                db.add(settings)
-            else:
-                if settings.chats_to_join is None:
-                    settings.chats_to_join = []
-                settings.chats_to_join.append(chat)
-
+        # Retrieve settings or create a new one if it doesn't exist
+        settings = db.query(Settings).first()
+        if not settings:
+            settings = Settings()
+            db.add(settings)
             db.commit()
-            db.refresh(settings)  # Refresh the settings object from the database
+            db.refresh(settings)
 
-            await update.message.reply_text(f"New Chat '{chat_name}' with Link '{chat_link}' added to Group join Protocol.\n\n Users will be requested to join this Chat when required, and the /strict_join is enabled")
-        except ValueError:
-            await update.message.reply_text("Chat ID must be a number.")
-        except Exception as e:
-            await update.message.reply_text(f"Failed to add chat: {e}")
-        finally:
-            db.close()  # Ensure the session is properly closed
+        # Load existing chats_to_join or initialize an empty list
+        if settings.chats_to_join:
+            chats_to_join = json.loads(settings.chats_to_join)
+        else:
+            chats_to_join = []
+
+        # Add the new chat to the list
+        chats_to_join.append(chat)
+        settings.chats_to_join = json.dumps(chats_to_join)
+
+        # Commit the changes to the database
+        db.commit()
+
+        await update.message.reply_text(f"New Chat '{chat_name}' with Link '{chat_link}' added to Group join Protocol.\n\n Users will be requested to join this Chat when required, and the /strict_join is enabled")
+        # except ValueError:
+        #     await update.message.reply_text("Chat ID must be a number.")
+        # except Exception as e:
+        #     await update.message.reply_text(f"Failed to add chat: {e}")
     else:
         await update.message.reply_text("You are not authorized to use this command.")
 
 
+import json
+
 async def remove_chat_group(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
     db: Session = next(get_db())
-    settings = db.query(Settings).first()
-    
-    if user.id in [admin.telegram_id for admin in db.query(Admin).all()]:
+    admins = [admin.telegram_id for admin in db.query(Admin).all()]
+
+    if user.id in admins:
         if len(context.args) != 1:
             await update.message.reply_text("Please provide the chat name to remove in the format: /remove_chat_group <chat_name>")
             return
 
         try:
             chat_name = context.args[0].lower()
+
+            # Retrieve settings from the database
+            settings = db.query(Settings).first()
+
             if settings and settings.chats_to_join:
-                settings.chats_to_join = [chat for chat in settings.chats_to_join if chat['name'] != chat_name]
+                chats_to_join = json.loads(settings.chats_to_join)
+
+                # Remove the specified chat
+                updated_chats = [chat for chat in chats_to_join if chat['name'] != chat_name]
+
+                # Update the settings with the new list
+                settings.chats_to_join = json.dumps(updated_chats)
                 db.commit()
+
                 await update.message.reply_text(f"Chat '{chat_name}' removed successfully.")
             else:
                 await update.message.reply_text("No chat groups to remove.")
         except Exception as e:
             await update.message.reply_text(f"Failed to remove chat: {e}")
-        finally:
-            db.close()  # Ensure the session is properly closed
     else:
         await update.message.reply_text("You are not authorized to use this command.")
+
+
 
 
 async def toggle_strict_join(update: Update, context: CallbackContext) -> None:
@@ -188,27 +200,28 @@ async def toggle_strict_join(update: Update, context: CallbackContext) -> None:
 
 async def check_membership_button(update: Update, context: CallbackContext) -> bool:
     user = update.effective_user
+    chat_id = update.effective_user.id
     query = update.callback_query
     db: Session = next(get_db())
     settings = db.query(Settings).first()
-    
+
     if settings and settings.strict_join:
-        required_chats = settings.chats_to_join
+        required_chats = json.loads(settings.chats_to_join or '[]')
         all_joined = True
         buttons = []
-        
+
         for chat in required_chats:
-            # try:
-            member = await context.bot.get_chat_member(chat['id'], user.id)
-            status = "✅" if member.status in ['member', 'administrator', 'creator'] else "❌"
-            if status == "❌":
+            try:
+                member = await context.bot.get_chat_member(chat['id'], user.id)
+                status = "✅" if member.status in ['member', 'administrator', 'creator'] else "❌"
+                if status == "❌":
+                    all_joined = False
+            except:
+                status = "❌"
                 all_joined = False
-            # except:
-            #     status = "❌"
-            #     all_joined = False
-            
-            buttons.append([InlineKeyboardButton(f"{status} {chat['name']}", url=chat['chat_link'])])
-        
+
+            buttons.append([InlineKeyboardButton(f"{status} {chat['name']}", url=chat['link'])])
+
         buttons.append([InlineKeyboardButton("Check Again", callback_data="check_membership")])
         keyboard = InlineKeyboardMarkup(buttons)
 
@@ -223,10 +236,10 @@ async def check_membership_button(update: Update, context: CallbackContext) -> b
                 await query.edit_message_text("Please join the following chats:", reply_markup=keyboard)
             except Exception as e:
                 try:
-                    await query.edit_message_text("Please join the following chats.:", reply_markup=keyboard)
+                    await query.edit_message_text("Please join the following chats:", reply_markup=keyboard)
                 except:
-                    await update.message.reply_text("Please join the following chats.:", reply_markup=keyboard)
-                    
+                    await bot.send_message(text ="Please join the following chats:", chat_id=chat_id, reply_markup=keyboard)
+
             return False
     return True  # If strict_join is not enabled or no settings found
 
@@ -326,20 +339,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     finally:
         db.close()
 
-
-
-# Define menu command handler
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = [
-        ["Option 1"],
-        ["Option 2"],
-        ["Option 3", "Option 4"],
-        ["Option 5", "Option 6"],
-        ["Option 7", "Option 8"],
-        ["Option 9"],]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Here's the menu:", reply_markup=markup)
-
 async def forward_channel_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         db: Session = next(get_db())
@@ -370,6 +369,10 @@ async def forward_channel_message(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # if not await restricted_handler(update=update, context=context):
+    #     check_membership_button(update, context)
+    #     return
+    print("jkshdjhsdfkhjsd")
     db: Session = next(get_db())
     command_text = update.message.text.lower().replace("/", "")
     command = db.query(Command).filter_by(command=command_text).first()
@@ -411,6 +414,10 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # if not await restricted_handler(update=update, context=context):
+    #     check_membership_button(update, context)
+    #     return
+    print("dfghdfghdfg")
     db: Session = next(get_db())
     message_text = update.message.text.lower()
     command = db.query(Command).filter_by(command=message_text).first()
@@ -451,6 +458,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def affiliate(update: Update, context: CallbackContext) -> None:
+    if not await restricted_handler(update=update, context=context):
+        return
     user = update.effective_user
     db: Session = next(get_db())
 
@@ -635,11 +644,6 @@ async def add_command_image(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ADD_IMAGE
 
 async def add_command_inline_links(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # add_image = update.message.text.lower() == 'yes'
-    # if add_image:
-    #     await update.message.reply_text("Please send the image file:\n\nUse /cancel to cancel")
-    #     return ADD_INLINE_LINKS
-    # else:
     context.user_data['image_url'] = None
     await update.message.reply_text("Do you want to add inline links? (yes/no)\n\nUse /cancel to cancel")
     return ADD_INLINE_LINKS
@@ -872,6 +876,92 @@ async def export_database(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         await update.message.reply_text(f"Failed to export database: {e}")
 
+async def send_broadcast_message(context: CallbackContext, update, message: str) -> None:
+    db: Session = SessionLocal()
+    users = db.query(User).all()
+    total_users = len(users)
+    success_count = 0
+    failure_count = 0
+
+    for index, user in enumerate(users, start=1):
+        try:
+            # Send message to user
+            await bot.send_message(chat_id=user.telegram_id, text=message)
+            success_count += 1
+        except Exception as e:
+            failure_count += 1
+        
+        # Update admin with progress
+        try:
+            await bot.edit_message_text(
+                chat_id=update.effective_user.id,
+                message_id=context.user_data['edit_message_id'],
+                text=f"Broadcast Progress: {index}/{total_users}\nCurrent User: {user.first_name}\nSuccess: {success_count}, Failure: {failure_count}"
+            )
+        except Exception as e:
+            try:
+                text=f"Broadcast Progress: {index}/{total_users}\nCurrent User: {user.first_name}\nSuccess: {success_count}, Failure: {failure_count}"
+                broadcast_message = await bot.send_message(
+                    chat_id=update.effective_user.id, text=text
+                )
+                context.user_data['edit_message_id'] = broadcast_message.message_id
+            except:
+                print(f"Error updating admin: {e}")
+        
+        await asyncio.sleep(1)  # Adjust sleep time as needed to manage API rate limits
+
+    db.close()
+
+    # Final message to admin after completion
+    await bot.send_message(
+        chat_id=update.effective_user.id,
+        text=f"Broadcast completed. Total users: {total_users}\nSuccess: {success_count}, Failure: {failure_count}"
+    )
+
+# Conversation states
+BROADCAST_MESSAGE = 0
+
+async def broadcast_start(update: Update, context: CallbackContext) -> int:
+    user = update.effective_user
+    db: Session = SessionLocal()
+    admin = db.query(Admin).filter_by(telegram_id=user.id).first()
+    db.close()
+
+    if not admin:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return ConversationHandler.END
+
+    await update.message.reply_text("Please enter the message you want to broadcast.")
+    return BROADCAST_MESSAGE
+
+async def broadcast_receive_message(update: Update, context: CallbackContext) -> int:
+    context.user_data['message'] = update.message.text
+    await update.message.reply_text(f"You are about to broadcast the following message:\n\n{context.user_data['message']}\n\nSend /confirm to proceed")
+    return BROADCAST_MESSAGE
+
+async def broadcast_confirm(update: Update, context: CallbackContext) -> None:
+    message = context.user_data.get('message')
+    if message:
+        # Start the background task
+        await bot.send_message(text = "Broadcast started. You will be updated with the progress.", chat_id = update.effective_user.id)
+        task = asyncio.create_task(send_broadcast_message(context, update, message))
+    else:
+        await update.message.reply_text("No message found to broadcast.")
+
+    # Cleanup user_data after broadcasting
+    context.user_data.clear()
+
+    return ConversationHandler.END
+
+async def broadcast_cancel(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text("Broadcast canceled.")
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def broadcast_error(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text("An error occurred during the broadcast process.")
+
+
 async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     db: Session = next(get_db())
@@ -903,18 +993,31 @@ def main() -> None:
     application.add_handler(CommandHandler("set_ref_earning", set_ref_earning))
     application.add_handler(CommandHandler("set_broadcast_chat", set_broadcast_chat))
     application.add_handler(CommandHandler("set_downline_earning", set_downline_earning))
-    application.add_handler(CommandHandler("add_chat_group", add_chat_group))
+    application.add_handler(CommandHandler("add_chat_group", update_force_join_group))
     application.add_handler(CommandHandler("remove_chat_group", remove_chat_group))
     application.add_handler(CommandHandler("strict_join", toggle_strict_join))
     application.add_handler(CommandHandler('deduct_ref_points', deduct_ref_points))
     application.add_handler(CommandHandler('export', export_database))
     application.add_handler(CommandHandler("admin_help", admin_help))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="check_membership"))
+    
     
     
 
 
     # Conversation handlers for adding commands
+    broadcast_handler = ConversationHandler(
+        entry_points=[CommandHandler('broadcast', broadcast_start)],
+        states={
+            BROADCAST_MESSAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_receive_message),
+                CommandHandler('confirm', broadcast_confirm),
+                CommandHandler('cancel', broadcast_cancel),
+            ]
+        },
+        fallbacks=[CommandHandler('cancel', broadcast_cancel)],
+        allow_reentry=True
+    )
+
     add_command_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("addcommand", add_command_start)],
         states={
@@ -979,15 +1082,16 @@ def main() -> None:
 
     # Add conversation handlers to the application
     application.add_handler(add_command_conv_handler)
-    # application.add_handler(edit_command_conv_handler)
     application.add_handler(delete_command_conv_handler)
     application.add_handler(add_admin_conv_handler)
     application.add_handler(delete_admin_conv_handler)
-
+    application.add_handler(broadcast_handler)
     application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE, forward_channel_message))
+    application.add_handler(CallbackQueryHandler(button_callback, pattern="check_membership"))
     application.add_handler(MessageHandler(filters.COMMAND, command_handler))
     application.add_handler(MessageHandler(filters.TEXT, text_handler))
+    application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE & ~filters.COMMAND & ~filters.TEXT, forward_channel_message))
+    
     
     
 

@@ -55,10 +55,17 @@
         "usage": "/strict_join"
     },
     {
-        "command": "/set_broadcast_chat",
+        "command": "/set_broadcast_chat ( CURRENTLY DISABLED )",
         "description": "Use this command to a chat where you want to forward new messages from",
         "usage": "/set_broadcast_chat <chat_id_or_username_or_link>"
     },
+
+    {
+        "command": "/broadcast",
+        "description": "Use this command to asend bulk message to all your bot subscribers",
+        "usage": "broadcast"
+    },
+
     {
         "command": "/cancel",
         "description": "Cancel the current operation",
