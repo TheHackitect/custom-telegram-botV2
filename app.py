@@ -1093,7 +1093,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(button_callback, pattern="check_membership"))
     application.add_handler(MessageHandler(filters.COMMAND, command_handler))
     application.add_handler(MessageHandler(filters.TEXT, text_handler))
-    application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE & ~filters.COMMAND & ~filters.TEXT, forward_channel_message))
+    # application.add_handler(MessageHandler(filters.ChatType.GROUP | filters.ChatType.CHANNEL | filters.ChatType.SUPERGROUP | filters.ChatType.PRIVATE & ~filters.COMMAND & ~filters.TEXT, forward_channel_message))
     
     
     
