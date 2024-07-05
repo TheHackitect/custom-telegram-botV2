@@ -233,12 +233,12 @@ async def check_membership_button(update: Update, context: CallbackContext) -> b
             return True
         else:
             try:
-                await query.edit_message_text("Please join the following chats:", reply_markup=keyboard)
+                await query.edit_message_text("Please join the chats to use bot:", reply_markup=keyboard)
             except Exception as e:
                 try:
-                    await query.edit_message_text("Please join the following chats:", reply_markup=keyboard)
+                    await query.edit_message_text("Please join the chats to use bot.:", reply_markup=keyboard)
                 except:
-                    await bot.send_message(text ="Please join the following chats:", chat_id=chat_id, reply_markup=keyboard)
+                    await bot.send_message(text ="Please join the chats to use bot:", chat_id=chat_id, reply_markup=keyboard)
 
             return False
     return True  # If strict_join is not enabled or no settings found
