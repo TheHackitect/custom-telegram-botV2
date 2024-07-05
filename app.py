@@ -372,7 +372,6 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # if not await restricted_handler(update=update, context=context):
     #     check_membership_button(update, context)
     #     return
-    print("jkshdjhsdfkhjsd")
     db: Session = next(get_db())
     command_text = update.message.text.lower().replace("/", "")
     command = db.query(Command).filter_by(command=command_text).first()
@@ -471,15 +470,19 @@ async def affiliate(update: Update, context: CallbackContext) -> None:
         
         # Count the number of direct referrals
         referrals_count = db.query(User).filter(User.referer_id == user_data.id).count()
+        # Fetch and send response for the start command
+        command_text = "affiliate"
+        command = db.query(Command).filter_by(command=command_text).first()
         
         affiliate_info = (
             f"👤 Your Affiliate Information\n\n"
             f"👥 Referrals: {referrals_count}\n"
             f"💰 Earnings: {user_data.earnings}\n"
-            f"💸 Downline Earnings: {user_data.downline_earnings}\n"
-            f"🔗 Referral Link: {ref_link}\n"  # Escape the '.' in ref_link
+            # f"💸 Downline Earnings: {user_data.downline_earnings}\n"
+            f"🔗 Referral Link: {ref_link}"  # Escape the '.' in ref_link
         )
-        await update.message.reply_text(affiliate_info)
+        message =  affiliate_info if not command else f"{affiliate_info}\n\n{command.response}"
+        await update.message.reply_text(message)
     else:
         await update.message.reply_text("You are not registered as a user.")
 
