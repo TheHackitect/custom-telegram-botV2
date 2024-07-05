@@ -48,5 +48,7 @@ class Settings(Base):
     id = Column(Integer, primary_key=True, index=True)
     referral_earning = Column(Float, default=0.0)
     downline_earning = Column(Float, default=0.0)
+    chats = Column(JSON, default=[])  # List of chats
+    strict_join = Column(Boolean, default=False)  # Strict join boolean
 
 Base.metadata.create_all(bind=engine)

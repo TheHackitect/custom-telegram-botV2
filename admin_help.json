@@ -40,6 +40,21 @@
         "usage": "/deleteadmin"
     },
     {
+        "command": "/add_chat",
+        "description": "Add a new chat that users must Join",
+        "usage": "/add_chat <chat_name> <chat_id> <chat_link>"
+    },
+    {
+        "command": "/remove_chat",
+        "description": "Remove a chat From the list of chats users should join",
+        "usage": "/remove_chat <chat_name> "
+    },
+    {
+        "command": "/strict_join",
+        "description": "Use this command to enforce the Join rule of the set chats",
+        "usage": "/strict_join"
+    },
+    {
         "command": "/cancel",
         "description": "Cancel the current operation",
         "usage": "/cancel"
