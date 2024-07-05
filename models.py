@@ -1,13 +1,31 @@
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, JSON, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.sql import func
+from sqlalchemy.types import TypeDecorator, TEXT
+import json
 
 from config import DATABASE_URL
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+
+class JSONType(TypeDecorator):
+    impl = TEXT
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return '{}'
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return {}
+        return json.loads(value)
 
 class Command(Base):
     __tablename__ = "commands"
@@ -48,7 +66,8 @@ class Settings(Base):
     id = Column(Integer, primary_key=True, index=True)
     referral_earning = Column(Float, default=0.0)
     downline_earning = Column(Float, default=0.0)
-    chats = Column(JSON, default=[])  # List of chats
+    chats_to_join = Column(JSONType, default=[])
     strict_join = Column(Boolean, default=False)  # Strict join boolean
+    broadcast_chat = Column(String, nullable=True)
 
 Base.metadata.create_all(bind=engine)

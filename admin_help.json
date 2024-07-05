@@ -40,19 +40,24 @@
         "usage": "/deleteadmin"
     },
     {
-        "command": "/add_chat",
+        "command": "/add_chat_group",
         "description": "Add a new chat that users must Join",
-        "usage": "/add_chat <chat_name> <chat_id> <chat_link>"
+        "usage": "/add_chat_group <chat_name> <chat_id> <chat_link>"
     },
     {
-        "command": "/remove_chat",
+        "command": "/remove_chat_group",
         "description": "Remove a chat From the list of chats users should join",
-        "usage": "/remove_chat <chat_name> "
+        "usage": "/remove_chat_group <chat_name> "
     },
     {
         "command": "/strict_join",
         "description": "Use this command to enforce the Join rule of the set chats",
         "usage": "/strict_join"
+    },
+    {
+        "command": "/set_broadcast_chat",
+        "description": "Use this command to a chat where you want to forward new messages from",
+        "usage": "/set_broadcast_chat <chat_id_or_username_or_link>"
     },
     {
         "command": "/cancel",
