@@ -642,7 +642,7 @@ async def add_command_image(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         context.user_data['is_command'] = 0
         context.user_data['command'] = context.user_data['command']
     await update.message.reply_text("Great! Now, you can optionally Upload an IMAGE that will be sent with the prompt response\n\n"
-                                    f"If you dont wish to, just type 'skip'\n\n"
+                                    f"If you dont wish to, just type 'no'\n\n"
                                     f"Use /cancel to cancel")
     return ADD_IMAGE
 
