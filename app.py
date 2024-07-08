@@ -476,13 +476,43 @@ async def affiliate(update: Update, context: CallbackContext) -> None:
         
         affiliate_info = (
             f"👤 Your Affiliate Information\n\n"
+            f"🆔 User ID: {update.effective_user.id}\n"
             f"👥 Referrals: {referrals_count}\n"
             f"💰 Earnings: {user_data.earnings}\n"
             # f"💸 Downline Earnings: {user_data.downline_earnings}\n"
             f"🔗 Referral Link: {ref_link}"  # Escape the '.' in ref_link
         )
         message =  affiliate_info if not command else f"{affiliate_info}\n\n{command.response}"
-        await update.message.reply_text(message)
+
+        if command:
+            inline_reply_markup = None
+
+            # Prepare the inline keyboard markup if it exists
+            inline_keyboard = []
+            if command.inline_links:
+                inline_buttons = [InlineKeyboardButton(link['text'], url=link['url']) for link in command.inline_links]
+                inline_keyboard = create_button_layout(inline_buttons)
+            inline_reply_markup = InlineKeyboardMarkup(inline_keyboard) if inline_keyboard else None
+
+            # Prepare the markup buttons if they exist
+            markup_buttons = []
+            if command.markup_buttons:
+                markup_buttons_list = [KeyboardButton(button) for button in command.markup_buttons]
+                markup_buttons = create_button_layout(markup_buttons_list)
+            markup_reply_markup = ReplyKeyboardMarkup(markup_buttons, resize_keyboard=True) if markup_buttons else None
+
+            # Send the main response
+            if command.image_url:
+                await update.message.reply_photo(photo=command.image_url, caption=message, reply_markup=inline_reply_markup)
+            else:
+                await update.message.reply_text(text=message, reply_markup=inline_reply_markup, disable_web_page_preview=True)
+            
+            # Send the markup buttons as a separate message if they exist
+            if markup_reply_markup:
+                await update.message.reply_text("Menu", reply_markup=markup_reply_markup)
+        else:
+            await update.message.reply_text(f"Welcome {update.effective_user.first_name}!\n\n Use the /help command to see available commands")
+
     else:
         await update.message.reply_text("You are not registered as a user.")
 
@@ -879,7 +909,7 @@ async def export_database(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         await update.message.reply_text(f"Failed to export database: {e}")
 
-async def send_broadcast_message(context: CallbackContext, update, message: str) -> None:
+async def send_broadcast_message(context: CallbackContext, update: Update, message: str, photo_path: str = None, links: list = None) -> None:
     db: Session = SessionLocal()
     users = db.query(User).all()
     total_users = len(users)
@@ -888,15 +918,29 @@ async def send_broadcast_message(context: CallbackContext, update, message: str)
 
     for index, user in enumerate(users, start=1):
         try:
-            # Send message to user
-            await bot.send_message(chat_id=user.telegram_id, text=message)
+            if photo_path and links:
+                buttons = [InlineKeyboardButton(text=text, url=url) for text, url in links]
+                reply_markup = InlineKeyboardMarkup([[button] for button in buttons])
+
+                with open(photo_path, 'rb') as photo:
+                    await context.bot.send_photo(chat_id=user.telegram_id, photo=photo, caption=message, reply_markup=reply_markup)
+            elif photo_path and not links:
+                with open(photo_path, 'rb') as photo:
+                    await context.bot.send_photo(chat_id=user.telegram_id, photo=photo, caption=message)
+            elif links and not photo_path:
+                buttons = [InlineKeyboardButton(text=text, url=url) for text, url in links]
+                reply_markup = InlineKeyboardMarkup([[button] for button in buttons])
+                await context.bot.send_message(chat_id=user.telegram_id, text=message, reply_markup=reply_markup)
+            else: 
+                await context.bot.send_message(chat_id=user.telegram_id, text=message)
+
             success_count += 1
         except Exception as e:
             failure_count += 1
         
         # Update admin with progress
         try:
-            await bot.edit_message_text(
+            await context.bot.edit_message_text(
                 chat_id=update.effective_user.id,
                 message_id=context.user_data['edit_message_id'],
                 text=f"Broadcast Progress: {index}/{total_users}\nCurrent User: {user.first_name}\nSuccess: {success_count}, Failure: {failure_count}"
@@ -904,25 +948,29 @@ async def send_broadcast_message(context: CallbackContext, update, message: str)
         except Exception as e:
             try:
                 text=f"Broadcast Progress: {index}/{total_users}\nCurrent User: {user.first_name}\nSuccess: {success_count}, Failure: {failure_count}"
-                broadcast_message = await bot.send_message(
+                broadcast_message = await context.bot.send_message(
                     chat_id=update.effective_user.id, text=text
                 )
                 context.user_data['edit_message_id'] = broadcast_message.message_id
-            except:
+            except Exception as e:
                 print(f"Error updating admin: {e}")
         
         await asyncio.sleep(1)  # Adjust sleep time as needed to manage API rate limits
 
     db.close()
 
+    # Delete the image after broadcast if exists
+    if photo_path and os.path.exists(photo_path):
+        os.remove(photo_path)
+
     # Final message to admin after completion
-    await bot.send_message(
+    await context.bot.send_message(
         chat_id=update.effective_user.id,
         text=f"Broadcast completed. Total users: {total_users}\nSuccess: {success_count}, Failure: {failure_count}"
     )
 
 # Conversation states
-BROADCAST_MESSAGE = 0
+BROADCAST_MESSAGE, BROADCAST_IMAGE, BROADCAST_LINKS, BROADCAST_CONFIRM = range(4)
 
 async def broadcast_start(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
@@ -939,15 +987,59 @@ async def broadcast_start(update: Update, context: CallbackContext) -> int:
 
 async def broadcast_receive_message(update: Update, context: CallbackContext) -> int:
     context.user_data['message'] = update.message.text
-    await update.message.reply_text(f"You are about to broadcast the following message:\n\n{context.user_data['message']}\n\nSend /confirm to proceed")
-    return BROADCAST_MESSAGE
+    await update.message.reply_text("Please send the image you want to include in the broadcast or send /skip if you don't want to add an image.")
+    return BROADCAST_IMAGE
 
-async def broadcast_confirm(update: Update, context: CallbackContext) -> None:
+async def broadcast_receive_image(update: Update, context: CallbackContext) -> int:
+    # Get the largest available photo (last in the list)
+    photo = update.message.photo[-1]
+    file_id = photo.file_id
+
+    try:
+        # Get the file object for the photo using file_id
+        photo_obj = await context.bot.get_file(file_id)
+
+        # Generate a unique filename for the image
+        image_id = str(uuid.uuid4())
+        file_path = f'/tmp/{image_id}.jpg'
+
+        # Download the photo to the specified file path using download_to_drive method
+        await photo_obj.download_to_drive(custom_path=file_path)  
+
+        # Store the image path in user_data for later use
+        context.user_data['photo_path'] = file_path
+
+        # Proceed to ask about inline links or finish
+        await update.message.reply_text("✅ Image saved successfully. \n\nPlease enter the inline links in the format: TEXT1,URL1;TEXT2,URL2... or send /skip if you don't want to add links.")
+        return BROADCAST_LINKS
+
+    except Exception as e:
+        await update.message.reply_text(f"Failed to save image: {e}")
+        return BROADCAST_IMAGE
+
+
+async def broadcast_skip_image(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text("Please enter the inline links in the format: TEXT1,URL1;TEXT2,URL2... or send /skip if you don't want to add links.")
+    return BROADCAST_LINKS
+
+async def broadcast_receive_links(update: Update, context: CallbackContext) -> int:
+    links = update.message.text.split(';')
+    context.user_data['links'] = [(text.strip(), url.strip()) for text, url in (link.split(',') for link in links)]
+    await update.message.reply_text(f"You are about to broadcast the following message:\n\n{context.user_data['message']}\n\nSend /confirm to proceed")
+    return BROADCAST_CONFIRM
+
+async def broadcast_skip_links(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text(f"You are about to broadcast the following message:\n\n{context.user_data['message']}\n\nSend /confirm to proceed")
+    return BROADCAST_CONFIRM
+
+async def broadcast_confirm(update: Update, context: CallbackContext) -> int:
     message = context.user_data.get('message')
+    photo_path = context.user_data.get('photo_path')
+    links = context.user_data.get('links')
+
     if message:
-        # Start the background task
-        await bot.send_message(text = "Broadcast started. You will be updated with the progress.", chat_id = update.effective_user.id)
-        task = asyncio.create_task(send_broadcast_message(context, update, message))
+        await context.bot.send_message(text="Broadcast started. You will be updated with the progress.", chat_id=update.effective_user.id)
+        task = asyncio.create_task(send_broadcast_message(context, update, message, photo_path, links))
     else:
         await update.message.reply_text("No message found to broadcast.")
 
@@ -961,6 +1053,7 @@ async def broadcast_cancel(update: Update, context: CallbackContext) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+# Error handling
 async def broadcast_error(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text("An error occurred during the broadcast process.")
 
@@ -1013,9 +1106,20 @@ def main() -> None:
         states={
             BROADCAST_MESSAGE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_receive_message),
+                CommandHandler('skip', broadcast_skip_image),
+            ],
+            BROADCAST_IMAGE: [
+                MessageHandler(filters.PHOTO, broadcast_receive_image),
+                CommandHandler('skip', broadcast_skip_image),
+            ],
+            BROADCAST_LINKS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_receive_links),
+                CommandHandler('skip', broadcast_skip_links),
+            ],
+            BROADCAST_CONFIRM: [
                 CommandHandler('confirm', broadcast_confirm),
                 CommandHandler('cancel', broadcast_cancel),
-            ]
+            ],
         },
         fallbacks=[CommandHandler('cancel', broadcast_cancel)],
         allow_reentry=True
